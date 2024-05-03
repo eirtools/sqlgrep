@@ -1,8 +1,8 @@
 [package]
 name = "sqlgrep"
-version = "0.1.0"
+version = "0.1.1"
 description = "Grep SQL databases for fun and profit."
-readme = "README.adoc"
+readme = "doc/CRATE.md"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Eir Nym <eirnym@gmail.com>"]
