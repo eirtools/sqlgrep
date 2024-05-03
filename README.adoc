@@ -1,0 +1,28 @@
+:toc:
+# SQL Grep
+
+## Overview
+
+Grep SQL like other files on your filesystem and find where specific pattern occurs.
+
+It's easy to find a situation when we know that there's some specific data inside a database, and it's not known where to search it.
+
+In this scenario sqlgrep tool is very handy as it's easy to find which cells are interconnected and how.
+
+This could be useful for development or reverse engeneering.
+
+This tool reads all cells, converts data to a string, then trying to match a pattern.
+
+## Installation
+
+### Prerequisites
+
+Install Rust using official guide at https://www.rust-lang.org/tools/install.
+
+### Install sqlgrep
+
+Enter this command to install or update the tool:
+
+```shell
+$ cargo install sqlgrep
+```

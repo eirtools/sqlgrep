@@ -1,0 +1,22 @@
+[package]
+name = "sqlgrep"
+version = "0.1.0"
+description = "Grep SQL databases for fun and profit."
+readme = "README.adoc"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Eir Nym <eirnym@gmail.com>"]
+repository = "https://github.com/eirtools/sqlgrep"
+
+
+[dependencies]
+sqlx = { version = "0.7.4", features = ["runtime-tokio-native-tls", "sqlite", "chrono"]}
+tokio = { version = "1.20.0", features = ["macros", "rt-multi-thread"]}
+sqlparser = "0.45.0"
+chrono = {version = "0.4.38", features = ["alloc"]}
+log = "0.4.21"
+futures = {version = "0.3.30", features = ["async-await"]}
+clap = { version = "4.5.0", features = ["derive", "wrap_help"] }
+indoc = "2.0.5"
+stderrlog ="0.6.0"
+regex = "1.10.4"
