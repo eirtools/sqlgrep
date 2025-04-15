@@ -27,9 +27,9 @@ repos:
   hooks:
   - id: check-github-workflows
   - id: check-renovate
--   repo: https://github.com/backplane/pre-commit-rust-hooks
-    rev: v1.1.0
-    hooks:
-    -   id: fmt
-    -   id: check
-    -   id: clippy
+- repo: https://github.com/backplane/pre-commit-rust-hooks
+  rev: v1.1.0
+  hooks:
+  - id: fmt
+  - id: check
+  - id: clippy
