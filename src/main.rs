@@ -2,7 +2,6 @@ mod args;
 mod cell_to_string;
 mod select;
 
-use clap::Parser as _;
 use sqlparser::dialect::SQLiteDialect;
 
 use sqlx::sqlite::SqliteConnectOptions;
@@ -11,7 +10,7 @@ use sqlx::{Column, Executor, Pool, Row, Sqlite, SqlitePool};
 
 #[tokio::main()]
 async fn main() {
-    let args = args::Args::parse();
+    let args = args::parse_args();
     // Set default log level to 2.
     let quiet_level: i16 = 2 + args.verbose as i16 - args.quiet as i16;
 
@@ -32,10 +31,25 @@ async fn main() {
         }
     };
 
-    process_sqlite_database(args.database_uri, &pattern).await;
+    let select_variant = match args.table {
+        None => SelectVariant::WholeDB,
+        Some(table_names) => SelectVariant::SpecificTables(table_names),
+    };
+
+    match process_sqlite_database(args.database_uri, &pattern, select_variant).await {
+        Ok(_) => {}
+        Err(err) => {
+            log::error!("Unable read tables from database: {}", err);
+            std::process::exit(74);
+        }
+    }
 }
 
-async fn process_sqlite_database(database_uri: String, pattern: &regex::Regex) {
+async fn process_sqlite_database(
+    database_uri: String,
+    pattern: &regex::Regex,
+    select_variant: SelectVariant,
+) -> Result<(), Error> {
     let dialect = SQLiteDialect {};
 
     let options: SqliteConnectOptions = match database_uri.parse::<SqliteConnectOptions>() {
@@ -54,18 +68,36 @@ async fn process_sqlite_database(database_uri: String, pattern: &regex::Regex) {
         }
     };
 
-    let table_names = match sqlite_select_tables(&db).await {
-        Ok(db) => db,
-        Err(err) => {
-            log::error!("Unable read tables from database: {}", err);
-            std::process::exit(74);
+    match select_variant {
+        SelectVariant::WholeDB => match sqlite_select_tables(&db).await {
+            Ok(table_names) => {
+                let mut table_names = table_names;
+                sqlite_select_from_tables(&db, &mut table_names, pattern, &dialect).await
+            }
+            Err(err) => Err(err),
+        },
+        SelectVariant::SpecificTables(table_names) => {
+            let mut table_names = table_names.into_iter();
+            sqlite_select_from_tables(&db, &mut table_names, pattern, &dialect).await
         }
-    };
-
-    for table_name in table_names {
-        let select_query = select::generate_select(table_name.as_str(), &dialect);
-        sqlite_check_rows(&table_name, &db, select_query.as_str(), pattern).await;
     }
+}
+
+async fn sqlite_select_from_tables<Iter>(
+    db: &Pool<Sqlite>,
+    table_names: &mut Iter,
+    pattern: &regex::Regex,
+    dialect: &SQLiteDialect,
+) -> Result<(), Error>
+where
+    Iter: Iterator<Item = String>,
+{
+    for table_name in table_names {
+        let select_query = select::generate_select(table_name.as_str(), dialect);
+        sqlite_check_rows(&table_name, db, select_query.as_str(), pattern).await;
+    }
+
+    Ok(())
 }
 
 async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<impl Iterator<Item = String>, Error> {
@@ -157,4 +189,10 @@ fn sqlite_process_row(
             println!("{table_name}::{row_idx}::{column_name} => {value_str:?}");
         }
     }
+}
+
+#[non_exhaustive]
+enum SelectVariant {
+    WholeDB,
+    SpecificTables(Vec<String>),
 }

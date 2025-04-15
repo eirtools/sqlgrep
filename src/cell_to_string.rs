@@ -51,12 +51,14 @@ pub(crate) fn sqlite_cell_to_string(value_ref: SqliteValueRef) -> Result<Option<
     }
     // Date
     if <chrono::NaiveDate as Type<Sqlite>>::compatible(&type_info) {
-        let value = <chrono::NaiveDate as Decode<Sqlite>>::decode(value_ref).map_err(errr_format)?;
+        let value =
+            <chrono::NaiveDate as Decode<Sqlite>>::decode(value_ref).map_err(errr_format)?;
         return Ok(Some(value.format("%Y-%m-%d").to_string()));
     }
     // Time
     if <chrono::NaiveTime as Type<Sqlite>>::compatible(&type_info) {
-        let value = <chrono::NaiveTime as Decode<Sqlite>>::decode(value_ref).map_err(errr_format)?;
+        let value =
+            <chrono::NaiveTime as Decode<Sqlite>>::decode(value_ref).map_err(errr_format)?;
         return Ok(Some(value.format("%H:%M:%S").to_string()));
     }
 
