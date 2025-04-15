@@ -2,12 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "commitMessageExtra": "from {{{currentValue}}} to {{{newValue}}}{{#if isMajor}} (major v{{{newMajor}}}){{else}}{{/if}}",
   "extends": [
-    "config:base"
+    "config:recommended"
   ],
+  "osvVulnerabilityAlerts": true,
   "pre-commit": {
     "enabled": true
   },
-  "separateMajorMin or": true,
+  "separateMajorMinor": true,
   "separateMinorPatch": true,
-  "separateMultipleMajor": true
+  "separateMultipleMajor": true,
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
 }
