@@ -12,7 +12,7 @@ repository = "https://github.com/eirtools/sqlgrep"
 [dependencies]
 sqlx = { version = "0.8.4", features = ["runtime-tokio-native-tls", "sqlite", "chrono"]}
 tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"]}
-sqlparser = "0.45.0"
+sqlparser = "0.55.0"
 chrono = {version = "0.4.40", features = ["alloc"]}
 log = "0.4.27"
 futures = {version = "0.3.31", features = ["async-await"]}
