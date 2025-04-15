@@ -10,13 +10,13 @@ repository = "https://github.com/eirtools/sqlgrep"
 
 
 [dependencies]
-sqlx = { version = "0.7.4", features = ["runtime-tokio-native-tls", "sqlite", "chrono"]}
-tokio = { version = "1.20.0", features = ["macros", "rt-multi-thread"]}
+sqlx = { version = "0.8.4", features = ["runtime-tokio-native-tls", "sqlite", "chrono"]}
+tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"]}
 sqlparser = "0.45.0"
-chrono = {version = "0.4.38", features = ["alloc"]}
-log = "0.4.21"
-futures = {version = "0.3.30", features = ["async-await"]}
-clap = { version = "4.5.0", features = ["derive", "wrap_help"] }
-indoc = "2.0.5"
+chrono = {version = "0.4.40", features = ["alloc"]}
+log = "0.4.27"
+futures = {version = "0.3.31", features = ["async-await"]}
+clap = { version = "4.5.36", features = ["derive", "wrap_help"] }
+indoc = "2.0.6"
 stderrlog ="0.6.0"
-regex = "1.10.4"
+regex = "1.11.1"
