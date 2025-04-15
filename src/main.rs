@@ -101,13 +101,12 @@ where
 }
 
 async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<impl Iterator<Item = String>, Error> {
-    let result = db
-        .fetch_all(
-            "SELECT name
+    let select_query = "SELECT name
         FROM sqlite_schema
-        WHERE type ='table';",
-        )
-        .await?;
+        WHERE type ='table'";
+
+    log::debug!("Execute query: {select_query}");
+    let result = db.fetch_all(select_query).await?;
 
     Ok(result
         .into_iter()
@@ -130,10 +129,10 @@ async fn sqlite_check_rows(
     use std::sync::atomic::AtomicI64;
     use std::sync::atomic::Ordering;
 
+    log::debug!("Execute query: {select_query}");
     let mut rows = db.fetch(select_query);
 
     log::debug!("==> {table_name}");
-    // REVIEW: investigate if there's a better way to enumerate async stream.
     let row_idx: AtomicI64 = AtomicI64::new(-1);
     loop {
         row_idx.fetch_add(1, Ordering::SeqCst);
