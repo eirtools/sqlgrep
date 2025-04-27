@@ -16,28 +16,6 @@ pub(crate) enum Pattern {
 }
 
 impl Pattern {
-    pub fn new_raw(
-        pattern: &str,
-        is_fixed: bool,
-        case_insensitive: bool,
-        whole_string: bool,
-    ) -> Result<Self, SQLError> {
-        let kind = if is_fixed {
-            PatternKind::Fixed
-        } else {
-            PatternKind::Regex
-        };
-
-        Self::new(
-            pattern,
-            &kind,
-            PatternOptions {
-                case_insensitive,
-                whole_string,
-            },
-        )
-    }
-
     pub fn new(
         pattern: &str,
         kind: &PatternKind,

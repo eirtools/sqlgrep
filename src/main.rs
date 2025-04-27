@@ -21,27 +21,13 @@ use sqlx::{sqlite::SqliteConnectOptions, Executor as _, Pool, Row as _, Sqlite, 
 #[tokio::main()]
 async fn main() {
     let args = args::parse_args();
-    // Set default log level to 2.
-    let quiet_level: i16 = 2 + i16::from(args.verbose) - i16::from(args.quiet);
 
-    stderrlog::new()
-        .module(module_path!())
-        .quiet(quiet_level < 0)
-        .verbosity(quiet_level.unsigned_abs() as usize)
-        .timestamp(stderrlog::Timestamp::Off)
-        .color(stderrlog::ColorChoice::Auto)
-        .init()
-        .unwrap();
+    setup_logging(args.verbose.level());
 
-    let pattern = Pattern::new_raw(
-        args.pattern.as_str(),
-        args.pattern_fixed,
-        args.pattern_case_insensitive,
-        args.pattern_whole_string,
-    )
-    .unwrap_or_else(|error| std::process::exit(error.report(Level::Error)));
+    let pattern = create_pattern(&args.pattern)
+        .unwrap_or_else(|error| std::process::exit(error.report(Level::Error)));
 
-    let queries = match read_queries(args.query) {
+    let queries = match read_queries(args.query.query) {
         Ok(queries) => queries,
         Err(error) => std::process::exit(error.report(Level::Error)),
     };
@@ -49,15 +35,43 @@ async fn main() {
     match process_sqlite_database(
         args.database_uri,
         pattern,
-        args.table,
+        args.query.table,
         queries,
-        args.ignore_non_readonly,
+        args.query.ignore_non_readonly,
     )
     .await
     {
         Ok(()) => {}
         Err(error) => std::process::exit(error.report(Level::Error)),
     }
+}
+
+fn setup_logging(verbosity_level: i16) {
+    stderrlog::new()
+        .module(module_path!())
+        .quiet(verbosity_level < 0)
+        .verbosity(verbosity_level.unsigned_abs() as usize)
+        .timestamp(stderrlog::Timestamp::Off)
+        .color(stderrlog::ColorChoice::Auto)
+        .init()
+        .unwrap();
+}
+
+fn create_pattern(options: &args::PatternArgs) -> Result<Pattern, SQLError> {
+    let kind = if options.fixed {
+        pattern::PatternKind::Fixed
+    } else {
+        pattern::PatternKind::Regex
+    };
+
+    Pattern::new(
+        options.pattern.as_str(),
+        &kind,
+        pattern::PatternOptions {
+            case_insensitive: options.case_insensitive,
+            whole_string: options.whole_string,
+        },
+    )
 }
 
 async fn process_sqlite_database(
