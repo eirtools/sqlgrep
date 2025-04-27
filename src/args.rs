@@ -18,6 +18,21 @@ pub(crate) struct Args {
     #[arg(action=ArgAction::Count)]
     pub(crate) verbose: u8,
 
+    #[arg(short = 'F', long = "pattern-fixed")]
+    #[arg(help = "Pattern is a fixed string")]
+    #[arg(action=ArgAction::SetTrue)]
+    pub(crate) pattern_fixed: bool,
+
+    #[arg(short = 'W', long = "pattern-whole")]
+    #[arg(help = "Pattern matches whole string")]
+    #[arg(action=ArgAction::SetTrue)]
+    pub(crate) pattern_whole_string: bool,
+
+    #[arg(short = 'i', long = "pattern-case-insensitive")]
+    #[arg(help = "Pattern is case insensitive")]
+    #[arg(action=ArgAction::SetTrue)]
+    pub(crate) pattern_case_insensitive: bool,
+
     #[arg(short = 't', long = "table")]
     #[arg(help = "Table or view to query. Can be used multiple times")]
     #[arg(action=ArgAction::Append)]
@@ -28,7 +43,7 @@ pub(crate) struct Args {
     #[arg(action=ArgAction::Append)]
     pub(crate) query: Vec<String>,
 
-    #[arg(short = 'i', long = "ignore")]
+    #[arg(short = 'I', long = "ignore")]
     #[arg(help = "Ignore non-readonly queries")]
     #[arg(action=ArgAction::SetTrue)]
     pub(crate) ignore_non_readonly: bool,

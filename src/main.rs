@@ -12,7 +12,7 @@ use std::io::stdin;
 use error::Level;
 use error::SQLError;
 use matching::sqlite_check_rows;
-use pattern::{Pattern, PatternKind};
+use pattern::Pattern;
 use query::{prepare_queries, SelectVariant};
 use sqlparser::dialect::SQLiteDialect;
 
@@ -33,14 +33,17 @@ async fn main() {
         .init()
         .unwrap();
 
-    let pattern = match Pattern::new(args.pattern.as_str(), &PatternKind::Regex) {
-        Ok(pattern) => pattern,
-        Err(err) => std::process::exit(err.report(Level::Error)),
-    };
+    let pattern = Pattern::new_raw(
+        args.pattern.as_str(),
+        args.pattern_fixed,
+        args.pattern_case_insensitive,
+        args.pattern_whole_string,
+    )
+    .unwrap_or_else(|error| std::process::exit(error.report(Level::Error)));
 
     let queries = match read_queries(args.query) {
         Ok(queries) => queries,
-        Err(err) => std::process::exit(err.report(Level::Error)),
+        Err(error) => std::process::exit(error.report(Level::Error)),
     };
 
     match process_sqlite_database(
@@ -53,7 +56,7 @@ async fn main() {
     .await
     {
         Ok(()) => {}
-        Err(err) => std::process::exit(err.report(Level::Error)),
+        Err(error) => std::process::exit(error.report(Level::Error)),
     }
 }
 
@@ -114,14 +117,14 @@ async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<Vec<String>, SQLError
     let result = db
         .fetch_all(select_query)
         .await
-        .map_err(|err| SQLError::SqlX(("fetch tables".into(), err)))?;
+        .map_err(|error| SQLError::SqlX(("fetch tables".into(), error)))?;
 
     Ok(result
         .into_iter()
         .filter_map(|row| match row.try_get::<String, &str>("name") {
             Ok(value) => Some(value),
-            Err(err) => {
-                SQLError::SqlX(("fetch tables".into(), err)).report(Level::Warn);
+            Err(error) => {
+                SQLError::SqlX(("fetch tables".into(), error)).report(Level::Warn);
                 None
             }
         })
