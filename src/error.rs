@@ -9,6 +9,7 @@ pub(crate) enum SQLError {
     ParseError(ParserError),
     SqlX((String, sqlx::Error)),
     ConvertCell((String, String)),
+    Io((String, std::io::Error)),
 }
 
 pub(crate) enum QueryError {
@@ -37,6 +38,12 @@ impl SQLError {
                 log::log!(level, "Unable to parse SQL: {error}");
 
                 66
+            }
+            SQLError::Io((context, error)) => {
+                let context = format_context(context);
+                log::log!(level, "IO error{context}: {error}");
+
+                70
             }
             SQLError::SqlX((context, error)) => {
                 let context = format_context(context);

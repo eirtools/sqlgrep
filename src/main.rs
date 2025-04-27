@@ -6,6 +6,9 @@ mod pattern;
 mod query;
 mod select;
 
+use std::fs::OpenOptions;
+use std::io::stdin;
+
 use error::Level;
 use error::SQLError;
 use matching::sqlite_check_rows;
@@ -35,11 +38,16 @@ async fn main() {
         Err(err) => std::process::exit(err.report(Level::Error)),
     };
 
+    let queries = match read_queries(args.query) {
+        Ok(queries) => queries,
+        Err(err) => std::process::exit(err.report(Level::Error)),
+    };
+
     match process_sqlite_database(
         args.database_uri,
         pattern,
         args.table,
-        args.query,
+        queries,
         args.ignore_non_readonly,
     )
     .await
@@ -118,4 +126,56 @@ async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<Vec<String>, SQLError
             }
         })
         .collect())
+}
+
+fn read_queries(queries: Vec<String>) -> Result<Vec<String>, SQLError> {
+    let mut acc = vec![];
+
+    queries.into_iter().try_fold((), |(), query| {
+        if query.is_empty() {
+            return Ok(());
+        }
+
+        if query == "-" {
+            return read_query(&mut stdin(), "<stdin>").map(|query| {
+                acc.push(query);
+            });
+        }
+
+        match query.strip_prefix('@') {
+            None => {
+                acc.push(query);
+                Ok(())
+            }
+            Some(filename) => read_from_file(filename).map(|query| {
+                acc.push(query);
+            }),
+        }
+    })?;
+
+    Ok(acc)
+}
+
+#[inline]
+fn read_from_file(filename: &str) -> Result<String, SQLError> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(false)
+        .create(false)
+        .open(filename)
+        .expect("Unable to open");
+
+    read_query(&mut file, filename)
+}
+
+#[inline]
+fn read_query<File>(file: &mut File, filename: &str) -> Result<String, SQLError>
+where
+    File: std::io::Read,
+{
+    let mut query = String::new();
+
+    file.read_to_string(&mut query)
+        .map_err(|error| SQLError::Io((format!("read {filename}"), error)))
+        .map(|_| query)
 }
