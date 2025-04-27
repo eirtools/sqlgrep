@@ -1,5 +1,7 @@
-use log::Level;
+use log::Level as LogLevel;
 use sqlparser::parser::ParserError;
+
+pub(crate) type Level = LogLevel;
 
 pub(crate) enum SQLError {
     Regex(regex::Error),
@@ -27,7 +29,7 @@ impl SQLError {
                     QueryError::ReadOnlyQueryAllowed => {
                         log::log!(level, "Only readonly query is allowed");
                     }
-                };
+                }
 
                 65
             }
@@ -37,27 +39,27 @@ impl SQLError {
                 66
             }
             SQLError::SqlX((context, error)) => {
-                let context = if context.is_empty() {
-                    "".to_owned()
-                } else {
-                    format!(" ({context})")
-                };
-
-                log::log!(level, "Query execution error{context}: {error}");
+                let context = format_context(context);
+                log::log!(level, "SQL error{context}: {error}");
 
                 74
             }
             SQLError::ConvertCell((context, error)) => {
-                let context = if context.is_empty() {
-                    "".to_owned()
-                } else {
-                    format!(" ({context})")
-                };
+                let context = format_context(context);
 
-                log::log!(level, "Query execution error{context}: {error}");
+                log::log!(level, "Cell conversion error{context}: {error}");
 
                 73
             }
         }
+    }
+}
+
+#[inline]
+fn format_context(context: &String) -> String {
+    if context.is_empty() {
+        String::new()
+    } else {
+        format!(" ({context})")
     }
 }

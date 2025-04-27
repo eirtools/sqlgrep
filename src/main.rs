@@ -6,8 +6,8 @@ mod pattern;
 mod query;
 mod select;
 
+use error::Level;
 use error::SQLError;
-use log::Level;
 use matching::sqlite_check_rows;
 use pattern::{Pattern, PatternKind};
 use query::{prepare_queries, SelectVariant};
@@ -19,7 +19,7 @@ use sqlx::{sqlite::SqliteConnectOptions, Executor as _, Pool, Row as _, Sqlite, 
 async fn main() {
     let args = args::parse_args();
     // Set default log level to 2.
-    let quiet_level: i16 = 2 + args.verbose as i16 - args.quiet as i16;
+    let quiet_level: i16 = 2 + i16::from(args.verbose) - i16::from(args.quiet);
 
     stderrlog::new()
         .module(module_path!())
@@ -30,7 +30,7 @@ async fn main() {
         .init()
         .unwrap();
 
-    let pattern = match Pattern::new(args.pattern.as_str(), PatternKind::Regex) {
+    let pattern = match Pattern::new(args.pattern.as_str(), &PatternKind::Regex) {
         Ok(pattern) => pattern,
         Err(err) => std::process::exit(err.report(Level::Error)),
     };
@@ -44,7 +44,7 @@ async fn main() {
     )
     .await
     {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(err) => std::process::exit(err.report(Level::Error)),
     }
 }
@@ -58,21 +58,14 @@ async fn process_sqlite_database(
 ) -> Result<(), SQLError> {
     let dialect = SQLiteDialect {};
 
-    let options: SqliteConnectOptions = match database_uri.parse::<SqliteConnectOptions>() {
-        Ok(options) => options.read_only(true).immutable(true),
-        Err(err) => {
-            log::error!("Database URI error: {}", err);
-            std::process::exit(64);
-        }
-    };
+    let options: SqliteConnectOptions = database_uri
+        .parse::<SqliteConnectOptions>()
+        .map(|options| options.read_only(true).immutable(true))
+        .map_err(|error| SQLError::SqlX(("Database URI".into(), error)))?;
 
-    let db = match SqlitePool::connect_with(options).await {
-        Ok(db) => db,
-        Err(err) => {
-            log::error!("Database connection error: {}", err);
-            std::process::exit(74);
-        }
-    };
+    let db = SqlitePool::connect_with(options)
+        .await
+        .map_err(|error| SQLError::SqlX(("Database connection".into(), error)))?;
 
     let select_variant = prepare_queries(
         tables.into_iter(),
@@ -87,19 +80,19 @@ async fn process_sqlite_database(
             let tables = sqlite_select_tables(&db).await?;
             let select_variant = prepare_queries(
                 tables.into_iter(),
-                Vec::new().into_iter(),
+                vec![].into_iter(),
                 &dialect,
                 ignore_non_read,
             )?;
             match select_variant {
-                SelectVariant::WholeDB => Vec::new(),
+                SelectVariant::WholeDB => vec![],
                 SelectVariant::Queries(queries) => queries,
             }
         }
     };
 
     for (query_id, query) in queries {
-        sqlite_check_rows(&db, query_id.as_str(), query.as_str(), &pattern).await
+        sqlite_check_rows(&db, query_id.as_str(), query.as_str(), &pattern).await;
     }
 
     Ok(())

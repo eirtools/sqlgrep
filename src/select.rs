@@ -1,5 +1,8 @@
 use sqlparser::ast::helpers::attached_token::AttachedToken;
-use sqlparser::ast::*;
+use sqlparser::ast::{
+    GroupByExpr, Ident, Select, SelectFlavor, SelectItem, SetExpr, Statement, TableFactor,
+    TableWithJoins, WildcardAdditionalOptions,
+};
 use sqlparser::dialect::Dialect;
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::Span;
@@ -91,18 +94,16 @@ pub(crate) fn read_verify_query(
     idx: &mut usize,
 ) -> Result<Vec<String>, SQLError> {
     let ast = Parser::parse_sql(dialect, sql).map_err(SQLError::ParseError)?;
-    let mut acc: Vec<String> = Vec::new();
-    ast.iter().try_fold((), |_, statement| {
+    let mut acc: Vec<String> = vec![];
+    ast.iter().try_fold((), |(), statement| {
         if matches!(statement, Statement::Query(_)) {
             acc.push(statement.to_string());
             *idx += 1;
             Ok(())
+        } else if ignore_non_read {
+            Ok(())
         } else {
-            if ignore_non_read {
-                Ok(())
-            } else {
-                Err(SQLError::QueryError(QueryError::ReadOnlyQueryAllowed))
-            }
+            Err(SQLError::QueryError(QueryError::ReadOnlyQueryAllowed))
         }
     })?;
 

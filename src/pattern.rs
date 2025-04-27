@@ -9,7 +9,7 @@ pub(crate) enum Pattern {
 }
 
 impl Pattern {
-    pub fn new(pattern: &str, kind: PatternKind) -> Result<Self, SQLError> {
+    pub fn new(pattern: &str, kind: &PatternKind) -> Result<Self, SQLError> {
         match kind {
             PatternKind::Regex => regex::Regex::new(pattern)
                 .map(Self::Regex)

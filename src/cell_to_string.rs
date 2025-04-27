@@ -1,9 +1,7 @@
-use log::warn;
 use sqlx::sqlite::SqliteValueRef;
 use sqlx::Decode;
 use sqlx::Sqlite;
 use sqlx::Type;
-use sqlx::TypeInfo;
 use sqlx::ValueRef;
 
 pub(crate) fn sqlite_cell_to_string(value_ref: SqliteValueRef) -> Result<Option<String>, String> {
@@ -68,6 +66,5 @@ pub(crate) fn sqlite_cell_to_string(value_ref: SqliteValueRef) -> Result<Option<
         return Ok(None);
     }
 
-    warn!("Unknown cell type: {}", type_info.name());
-    Ok(None)
+    Err("Unknown type".into())
 }

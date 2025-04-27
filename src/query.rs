@@ -28,7 +28,7 @@ where
         .collect();
 
     let mut idx = 0usize;
-    queries.into_iter().try_fold((), |_, sql| {
+    queries.into_iter().try_fold((), |(), sql| {
         read_verify_query(&sql, dialect, ignore_non_read, &mut idx)?
             .into_iter()
             .for_each(|query| queries_result.push((format!("Query #{idx}"), query)));

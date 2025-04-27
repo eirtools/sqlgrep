@@ -1,6 +1,7 @@
 use crate::cell_to_string::sqlite_cell_to_string;
+use crate::error::Level;
 use crate::{Pattern, SQLError};
-use log::Level;
+
 use sqlx::{Column, Executor, Pool, Row, Sqlite};
 
 pub async fn sqlite_check_rows(
@@ -10,37 +11,34 @@ pub async fn sqlite_check_rows(
     pattern: &Pattern,
 ) {
     use futures::TryStreamExt;
-    use std::sync::atomic::AtomicI64;
+    use std::sync::atomic::AtomicU64;
     use std::sync::atomic::Ordering;
 
     log::debug!("{query_id}: {select_query}");
 
     let mut rows = db.fetch(select_query);
 
-    let row_idx: AtomicI64 = AtomicI64::new(-1);
+    let row_counter: AtomicU64 = AtomicU64::new(0);
     loop {
-        row_idx.fetch_add(1, Ordering::SeqCst);
-        let idx = row_idx.load(Ordering::SeqCst);
+        let row_idx = row_counter.load(Ordering::SeqCst);
 
         let row = match rows.try_next().await {
             Ok(None) => break,
             Ok(Some(row)) => row,
-            Err(err) => {
-                log::warn!(
-                    "Error while reading row {idx} while executing query: {}",
-                    err
-                );
+            Err(error) => {
+                SQLError::SqlX((format!("{query_id}::{row_idx}"), error)).report(Level::Warn);
                 continue;
             }
         };
 
-        sqlite_process_row(idx, row, query_id, pattern);
+        sqlite_process_row(row_idx, &row, query_id, pattern);
+        row_counter.fetch_add(1, Ordering::SeqCst);
     }
 }
 
 fn sqlite_process_row(
-    row_idx: i64,
-    row: sqlx::sqlite::SqliteRow,
+    row_idx: u64,
+    row: &sqlx::sqlite::SqliteRow,
     query_id: &str,
     pattern: &Pattern,
 ) {
@@ -50,14 +48,12 @@ fn sqlite_process_row(
         let index = column.ordinal();
         let column_name = column.name().to_owned();
         let column_type = column.type_info().name();
-
-        let error_context =
-            format!("Reading row {row_idx} from table {query_id} column {column_name} of type {column_type}");
+        let row_id = format!("{query_id}::{row_idx}::{column_name}");
 
         let value_ref = match row.try_get_raw(index) {
             Ok(value_ref) => value_ref,
             Err(error) => {
-                SQLError::SqlX((error_context, error)).report(Level::Warn);
+                SQLError::SqlX((row_id, error)).report(Level::Warn);
                 continue;
             }
         };
@@ -66,13 +62,14 @@ fn sqlite_process_row(
             Ok(Some(value_str)) => value_str,
             Ok(None) => continue,
             Err(error) => {
+                let error_context = format!("{row_id} cell type {column_type}");
                 SQLError::ConvertCell((error_context, error)).report(Level::Warn);
                 continue;
             }
         };
 
         if pattern.is_match(&value_str) {
-            println!("{query_id}::{row_idx}::{column_name} => {value_str:?}");
+            println!("{row_id} => {value_str}");
         }
     }
 }
