@@ -1,7 +1,10 @@
 use sqlparser::ast::helpers::attached_token::AttachedToken;
 use sqlparser::ast::*;
 use sqlparser::dialect::Dialect;
+use sqlparser::parser::Parser;
 use sqlparser::tokenizer::Span;
+
+use crate::error::{QueryError, SQLError};
 
 ///
 ///  Generates wildcard select for given dialect:
@@ -69,4 +72,39 @@ pub(crate) fn generate_select(table_name: &str, dialect: &impl Dialect) -> Strin
     }));
 
     ast.to_string()
+}
+
+pub(crate) fn escape_table_name(table_name: &str, dialect: &impl Dialect) -> String {
+    Ident {
+        value: table_name.to_owned(),
+        quote_style: dialect.identifier_quote_style(table_name),
+        span: Span::empty(),
+    }
+    .to_string()
+}
+
+/// Checks and reformat select
+pub(crate) fn read_verify_query(
+    sql: &str,
+    dialect: &impl Dialect,
+    ignore_non_read: bool,
+    idx: &mut usize,
+) -> Result<Vec<String>, SQLError> {
+    let ast = Parser::parse_sql(dialect, sql).map_err(SQLError::ParseError)?;
+    let mut acc: Vec<String> = Vec::new();
+    ast.iter().try_fold((), |_, statement| {
+        if matches!(statement, Statement::Query(_)) {
+            acc.push(statement.to_string());
+            *idx += 1;
+            Ok(())
+        } else {
+            if ignore_non_read {
+                Ok(())
+            } else {
+                Err(SQLError::QueryError(QueryError::ReadOnlyQueryAllowed))
+            }
+        }
+    })?;
+
+    Ok(acc)
 }

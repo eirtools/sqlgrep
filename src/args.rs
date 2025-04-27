@@ -19,9 +19,19 @@ pub(crate) struct Args {
     pub(crate) verbose: u8,
 
     #[arg(short = 't', long = "table")]
-    #[arg(help = "Table or views to query. Can be used multiple times.")]
-    #[arg(action=ArgAction::Set)]
-    pub(crate) table: Option<Vec<String>>,
+    #[arg(help = "Table or view to query. Can be used multiple times")]
+    #[arg(action=ArgAction::Append)]
+    pub(crate) table: Vec<String>,
+
+    #[arg(short = 's', long = "sql")]
+    #[arg(help = "SQL query to run. Can be used multiple times")]
+    #[arg(action=ArgAction::Append)]
+    pub(crate) query: Vec<String>,
+
+    #[arg(short = 'i', long = "ignore")]
+    #[arg(help = "Ignore non-readonly queries")]
+    #[arg(action=ArgAction::SetTrue)]
+    pub(crate) ignore_non_readonly: bool,
 
     #[arg(help = "Pattern to match every cell with")]
     pub(crate) pattern: String,
