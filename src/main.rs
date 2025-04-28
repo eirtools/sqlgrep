@@ -12,7 +12,7 @@ use std::io::stdin;
 use error::Level;
 use error::SQLError;
 use matching::sqlite_check_rows;
-use pattern::{Pattern, PatternKind};
+use pattern::Pattern;
 use query::{prepare_queries, SelectVariant};
 use sqlparser::dialect::SQLiteDialect;
 
@@ -21,40 +21,57 @@ use sqlx::{sqlite::SqliteConnectOptions, Executor as _, Pool, Row as _, Sqlite, 
 #[tokio::main()]
 async fn main() {
     let args = args::parse_args();
-    // Set default log level to 2.
-    let quiet_level: i16 = 2 + i16::from(args.verbose) - i16::from(args.quiet);
 
-    stderrlog::new()
-        .module(module_path!())
-        .quiet(quiet_level < 0)
-        .verbosity(quiet_level.unsigned_abs() as usize)
-        .timestamp(stderrlog::Timestamp::Off)
-        .color(stderrlog::ColorChoice::Auto)
-        .init()
-        .unwrap();
+    setup_logging(args.verbose.level());
 
-    let pattern = match Pattern::new(args.pattern.as_str(), &PatternKind::Regex) {
-        Ok(pattern) => pattern,
-        Err(err) => std::process::exit(err.report(Level::Error)),
-    };
+    let pattern = create_pattern(&args.pattern)
+        .unwrap_or_else(|error| std::process::exit(error.report(Level::Error)));
 
-    let queries = match read_queries(args.query) {
+    let queries = match read_queries(args.query.query) {
         Ok(queries) => queries,
-        Err(err) => std::process::exit(err.report(Level::Error)),
+        Err(error) => std::process::exit(error.report(Level::Error)),
     };
 
     match process_sqlite_database(
         args.database_uri,
         pattern,
-        args.table,
+        args.query.table,
         queries,
-        args.ignore_non_readonly,
+        args.query.ignore_non_readonly,
     )
     .await
     {
         Ok(()) => {}
-        Err(err) => std::process::exit(err.report(Level::Error)),
+        Err(error) => std::process::exit(error.report(Level::Error)),
     }
+}
+
+fn setup_logging(verbosity_level: i16) {
+    stderrlog::new()
+        .module(module_path!())
+        .quiet(verbosity_level < 0)
+        .verbosity(verbosity_level.unsigned_abs() as usize)
+        .timestamp(stderrlog::Timestamp::Off)
+        .color(stderrlog::ColorChoice::Auto)
+        .init()
+        .unwrap();
+}
+
+fn create_pattern(options: &args::PatternArgs) -> Result<Pattern, SQLError> {
+    let kind = if options.fixed {
+        pattern::PatternKind::Fixed
+    } else {
+        pattern::PatternKind::Regex
+    };
+
+    Pattern::new(
+        options.pattern.as_str(),
+        &kind,
+        pattern::PatternOptions {
+            case_insensitive: options.case_insensitive,
+            whole_string: options.whole_string,
+        },
+    )
 }
 
 async fn process_sqlite_database(
@@ -114,14 +131,14 @@ async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<Vec<String>, SQLError
     let result = db
         .fetch_all(select_query)
         .await
-        .map_err(|err| SQLError::SqlX(("fetch tables".into(), err)))?;
+        .map_err(|error| SQLError::SqlX(("fetch tables".into(), error)))?;
 
     Ok(result
         .into_iter()
         .filter_map(|row| match row.try_get::<String, &str>("name") {
             Ok(value) => Some(value),
-            Err(err) => {
-                SQLError::SqlX(("fetch tables".into(), err)).report(Level::Warn);
+            Err(error) => {
+                SQLError::SqlX(("fetch tables".into(), error)).report(Level::Warn);
                 None
             }
         })
