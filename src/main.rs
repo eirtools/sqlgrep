@@ -1,18 +1,28 @@
 mod args;
 mod cell_to_string;
+mod error;
+mod matching;
+mod pattern;
+mod query;
 mod select;
 
+use std::fs::OpenOptions;
+use std::io::stdin;
+
+use error::Level;
+use error::SQLError;
+use matching::sqlite_check_rows;
+use pattern::{Pattern, PatternKind};
+use query::{prepare_queries, SelectVariant};
 use sqlparser::dialect::SQLiteDialect;
 
-use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::Error;
-use sqlx::{Column, Executor, Pool, Row, Sqlite, SqlitePool};
+use sqlx::{sqlite::SqliteConnectOptions, Executor as _, Pool, Row as _, Sqlite, SqlitePool};
 
 #[tokio::main()]
 async fn main() {
     let args = args::parse_args();
     // Set default log level to 2.
-    let quiet_level: i16 = 2 + args.verbose as i16 - args.quiet as i16;
+    let quiet_level: i16 = 2 + i16::from(args.verbose) - i16::from(args.quiet);
 
     stderrlog::new()
         .module(module_path!())
@@ -23,175 +33,149 @@ async fn main() {
         .init()
         .unwrap();
 
-    let pattern = match regex::Regex::new(&args.pattern) {
+    let pattern = match Pattern::new(args.pattern.as_str(), &PatternKind::Regex) {
         Ok(pattern) => pattern,
-        Err(err) => {
-            log::error!("Unable to compile pattern: {}", err);
-            std::process::exit(64);
-        }
+        Err(err) => std::process::exit(err.report(Level::Error)),
     };
 
-    let select_variant = match args.table {
-        None => SelectVariant::WholeDB,
-        Some(table_names) => SelectVariant::SpecificTables(table_names),
+    let queries = match read_queries(args.query) {
+        Ok(queries) => queries,
+        Err(err) => std::process::exit(err.report(Level::Error)),
     };
 
-    match process_sqlite_database(args.database_uri, &pattern, select_variant).await {
-        Ok(_) => {}
-        Err(err) => {
-            log::error!("Unable read tables from database: {}", err);
-            std::process::exit(74);
-        }
+    match process_sqlite_database(
+        args.database_uri,
+        pattern,
+        args.table,
+        queries,
+        args.ignore_non_readonly,
+    )
+    .await
+    {
+        Ok(()) => {}
+        Err(err) => std::process::exit(err.report(Level::Error)),
     }
 }
 
 async fn process_sqlite_database(
     database_uri: String,
-    pattern: &regex::Regex,
-    select_variant: SelectVariant,
-) -> Result<(), Error> {
+    pattern: Pattern,
+    tables: Vec<String>,
+    queries: Vec<String>,
+    ignore_non_read: bool,
+) -> Result<(), SQLError> {
     let dialect = SQLiteDialect {};
 
-    let options: SqliteConnectOptions = match database_uri.parse::<SqliteConnectOptions>() {
-        Ok(options) => options.read_only(true).immutable(true),
-        Err(err) => {
-            log::error!("Database URI error: {}", err);
-            std::process::exit(64);
-        }
-    };
+    let options: SqliteConnectOptions = database_uri
+        .parse::<SqliteConnectOptions>()
+        .map(|options| options.read_only(true).immutable(true))
+        .map_err(|error| SQLError::SqlX(("Database URI".into(), error)))?;
 
-    let db = match SqlitePool::connect_with(options).await {
-        Ok(db) => db,
-        Err(err) => {
-            log::error!("Database connection error: {}", err);
-            std::process::exit(74);
-        }
-    };
+    let db = SqlitePool::connect_with(options)
+        .await
+        .map_err(|error| SQLError::SqlX(("Database connection".into(), error)))?;
 
-    match select_variant {
-        SelectVariant::WholeDB => match sqlite_select_tables(&db).await {
-            Ok(table_names) => {
-                let mut table_names = table_names;
-                sqlite_select_from_tables(&db, &mut table_names, pattern, &dialect).await
+    let select_variant = prepare_queries(
+        tables.into_iter(),
+        queries.into_iter(),
+        &dialect,
+        ignore_non_read,
+    )?;
+
+    let queries = match select_variant {
+        SelectVariant::Queries(queries) => queries,
+        SelectVariant::WholeDB => {
+            let tables = sqlite_select_tables(&db).await?;
+            let select_variant = prepare_queries(
+                tables.into_iter(),
+                vec![].into_iter(),
+                &dialect,
+                ignore_non_read,
+            )?;
+            match select_variant {
+                SelectVariant::WholeDB => vec![],
+                SelectVariant::Queries(queries) => queries,
             }
-            Err(err) => Err(err),
-        },
-        SelectVariant::SpecificTables(table_names) => {
-            let mut table_names = table_names.into_iter();
-            sqlite_select_from_tables(&db, &mut table_names, pattern, &dialect).await
         }
-    }
-}
+    };
 
-async fn sqlite_select_from_tables<Iter>(
-    db: &Pool<Sqlite>,
-    table_names: &mut Iter,
-    pattern: &regex::Regex,
-    dialect: &SQLiteDialect,
-) -> Result<(), Error>
-where
-    Iter: Iterator<Item = String>,
-{
-    for table_name in table_names {
-        let select_query = select::generate_select(table_name.as_str(), dialect);
-        sqlite_check_rows(&table_name, db, select_query.as_str(), pattern).await;
+    for (query_id, query) in queries {
+        sqlite_check_rows(&db, query_id.as_str(), query.as_str(), &pattern).await;
     }
 
     Ok(())
 }
 
-async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<impl Iterator<Item = String>, Error> {
-    let select_query = "SELECT name
-        FROM sqlite_schema
-        WHERE type ='table'";
+async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<Vec<String>, SQLError> {
+    let select_query = "SELECT name FROM sqlite_schema WHERE type = 'table'";
 
     log::debug!("Execute query: {select_query}");
-    let result = db.fetch_all(select_query).await?;
+
+    let result = db
+        .fetch_all(select_query)
+        .await
+        .map_err(|err| SQLError::SqlX(("fetch tables".into(), err)))?;
 
     Ok(result
         .into_iter()
         .filter_map(|row| match row.try_get::<String, &str>("name") {
             Ok(value) => Some(value),
             Err(err) => {
-                log::warn!("Error while reading from table `sqlite_schema`: {}", err);
+                SQLError::SqlX(("fetch tables".into(), err)).report(Level::Warn);
                 None
             }
-        }))
+        })
+        .collect())
 }
 
-async fn sqlite_check_rows(
-    table_name: &String,
-    db: &Pool<Sqlite>,
-    select_query: &str,
-    pattern: &regex::Regex,
-) {
-    use futures::TryStreamExt;
-    use std::sync::atomic::AtomicI64;
-    use std::sync::atomic::Ordering;
+fn read_queries(queries: Vec<String>) -> Result<Vec<String>, SQLError> {
+    let mut acc = vec![];
 
-    log::debug!("Execute query: {select_query}");
-    let mut rows = db.fetch(select_query);
-
-    log::debug!("==> {table_name}");
-    let row_idx: AtomicI64 = AtomicI64::new(-1);
-    loop {
-        row_idx.fetch_add(1, Ordering::SeqCst);
-        let idx = row_idx.load(Ordering::SeqCst);
-
-        let row = match rows.try_next().await {
-            Ok(None) => break,
-            Ok(Some(row)) => row,
-            Err(err) => {
-                log::warn!(
-                    "Error while reading row {idx} from table `{table_name}`: {}",
-                    err
-                );
-                continue;
-            }
-        };
-
-        sqlite_process_row(idx, row, table_name, pattern);
-    }
-}
-
-fn sqlite_process_row(
-    row_idx: i64,
-    row: sqlx::sqlite::SqliteRow,
-    table_name: &String,
-    pattern: &regex::Regex,
-) {
-    use sqlx::TypeInfo;
-    let columns = row.columns();
-    for column in columns {
-        let index = column.ordinal();
-        let column_name = column.name().to_owned();
-
-        let value_ref = match row.try_get_raw(index) {
-            Ok(value_ref) => value_ref,
-            Err(err) => {
-                log::warn!("Error while reading row {row_idx} from table {table_name} column {column_name}: {}", err);
-                continue;
-            }
-        };
-
-        let value_str = match cell_to_string::sqlite_cell_to_string(value_ref) {
-            Ok(Some(value_str)) => value_str,
-            Ok(None) => continue,
-            Err(err) => {
-                let column_type = column.type_info().name();
-                log::warn!("Error while converting data from row {row_idx} from table {table_name} column {column_name} of type {column_type}: {}", err);
-                continue;
-            }
-        };
-
-        if pattern.is_match(&value_str) {
-            println!("{table_name}::{row_idx}::{column_name} => {value_str:?}");
+    queries.into_iter().try_fold((), |(), query| {
+        if query.is_empty() {
+            return Ok(());
         }
-    }
+
+        if query == "-" {
+            return read_query(&mut stdin(), "<stdin>").map(|query| {
+                acc.push(query);
+            });
+        }
+
+        match query.strip_prefix('@') {
+            None => {
+                acc.push(query);
+                Ok(())
+            }
+            Some(filename) => read_from_file(filename).map(|query| {
+                acc.push(query);
+            }),
+        }
+    })?;
+
+    Ok(acc)
 }
 
-#[non_exhaustive]
-enum SelectVariant {
-    WholeDB,
-    SpecificTables(Vec<String>),
+#[inline]
+fn read_from_file(filename: &str) -> Result<String, SQLError> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(false)
+        .create(false)
+        .open(filename)
+        .expect("Unable to open");
+
+    read_query(&mut file, filename)
+}
+
+#[inline]
+fn read_query<File>(file: &mut File, filename: &str) -> Result<String, SQLError>
+where
+    File: std::io::Read,
+{
+    let mut query = String::new();
+
+    file.read_to_string(&mut query)
+        .map_err(|error| SQLError::Io((format!("read {filename}"), error)))
+        .map(|_| query)
 }
