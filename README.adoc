@@ -1,28 +1,56 @@
 :toc:
-# SQL Grep
+= SQL Grep
 
-## Overview
+== Overview
 
 Grep SQL like other files on your filesystem and find where specific pattern occurs.
 
 It's easy to find a situation when we know that there's some specific data inside a database, and it's not known where to search it.
 
-In this scenario sqlgrep tool is very handy as it's easy to find which cells are interconnected and how.
+In this scenario `sqlgrep` tool is very handy as it's easy to find which cells are interconnected and how.
 
-This could be useful for development or reverse engeneering.
+This could be useful for development or reverse engineering.
 
 This tool reads all cells, converts data to a string, then trying to match a pattern.
 
-## Installation
+== Input
 
-### Prerequisites
+SQL Grep is a command line tool, and most of the data takes from command line arguments.
 
-Install Rust using official guide at https://www.rust-lang.org/tools/install.
+There's some notable information:
 
-### Install sqlgrep
+* Pattern is powered by https://lib.rs/crates/regex[regex crate] by default. Also there's option to change matching to fixed string.
+* Table names passed are properly escaped.
+* User can pass multiple SQL queries with command line arguments. Every SQL query may contain multiple queries and only `SELECT` queries are currently supported. Every SQL query is validated and reformatted as needed. Values can be passed as:
+** RAW SQL from argument value.
+** From STDIN, by passing `-`.
+** From file by preceding filename with `@` (similar to CURL).
+* Queries to select all data from tables (e.g. `SELECT * from table`) and user defined queries combined before execution. If this list contains 2 the same queries, both of them will be executed one after another.
+* For SQLite databases, it can be passed by filename and/or URL with `sqlite://` scheme.
+* SQLite databases are opened with `readonly` and `immutable` options turned on. Please, have a look on SQLite3 https://sqlite.org/c3ref/open.html[official documentation] for more information for details.
 
-Enter this command to install or update the tool:
+== Output
 
-```shell
-$ cargo install sqlgrep
-```
+Data is read from each SQL query, supported columns are converted to string which is matched to the pattern provided.
+
+If string value matches the pattern, then output in format below is generated.
+
+Output has following format:
+
+`<Table or Query>::<Row index>::<Column>::<Value>`.
+
+`Table or Query` is `Table <table name>` or `Query <query index>` for a user to identify the source of information.
+
+`<Row index>` is plain index starting with `0` of given query.
+
+NOTE: `Row Index` has nothing in common with `rowid`, which is not queried. It's just plain index. In some cases, it may be the same as `rowid - 1`.
+
+`<Column>` column name which has match.
+
+`<Value>` is string value after conversion.
+
+NOTE: Even `Value` is an UTF-8 string, it isn't sanitized, so be warned what data you checking. PR is welcome. AFAIK, most of tools which do pattern search doesn't do any sanitization for output.
+
+== Contributing
+
+PR are are always welcome
