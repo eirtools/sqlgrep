@@ -1,0 +1,108 @@
+---
+name: Release crate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  COLOR: yes
+  FORCE_COLOR: 1
+  CARGO_TERM_COLOR: always
+  CARGO_TERM_PROGRESS_WHEN: never
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+  CARGO_NET_RETRY: 10
+  BINSTALL_DISABLE_TELEMETRY: true
+
+jobs:
+  build-test:
+    permissions:
+      contents: read
+    if: ${{ github.ref == 'refs/heads/main' }}
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Rust version
+      run: |
+        rustc --version
+        cargo --version
+
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build
+
+  build:
+    needs: build-test
+    name: Build release for ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - target: aarch64-unknown-linux-gnu
+          os: ubuntu-24.04-arm
+        - target: x86_64-unknown-linux-gnu
+          os: ubuntu-latest
+        - target: x86_64-pc-windows-msvc
+          os: windows-latest
+        - target: universal-apple-darwin
+          os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Rust version
+      run: |
+        rustc --version
+        cargo --version
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    - name: Cache Cargo
+      uses: ./.github/actions/cache
+    - name: Build
+      uses: taiki-e/upload-rust-binary-action@v1.25.0
+      with:
+        bin: sqlgrep
+        target: ${{ matrix.target }}
+        # don't publish on github
+        #   we don't allow neither secrets to be used during build process, nor additional permissions
+        dry-run: true
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.target }}
+        path: '*-${{ matrix.target }}*'
+        retention-days: 1
+
+  publish-github:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    - uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
+        path: artifacts
+    - name: Publish github
+      run: |
+        package_version=$(cargo metadata --format-version 1 --no-deps| jq -r '.packages[].version')
+        gh release create "v${package_version}" --fail-on-no-commits --generate-notes  --latest artifacts/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-cargo:
+    runs-on: ubuntu-latest
+    needs: publish-github
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    - name: Package
+      run: cargo publish --no-verify
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
