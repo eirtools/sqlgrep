@@ -6,8 +6,8 @@ mod pattern;
 mod query;
 mod select;
 
-use std::fs::OpenOptions;
 use std::io::stdin;
+use std::io::Read;
 
 use error::Level;
 use error::SQLError;
@@ -27,7 +27,7 @@ async fn main() {
     let pattern = create_pattern(&args.pattern)
         .unwrap_or_else(|error| std::process::exit(error.report(Level::Error)));
 
-    let queries = match read_queries(args.query.query) {
+    let queries = match read_queries(args.query.query, stdin) {
         Ok(queries) => queries,
         Err(error) => std::process::exit(error.report(Level::Error)),
     };
@@ -145,54 +145,47 @@ async fn sqlite_select_tables(db: &Pool<Sqlite>) -> Result<Vec<String>, SQLError
         .collect())
 }
 
-fn read_queries(queries: Vec<String>) -> Result<Vec<String>, SQLError> {
+fn read_queries<R: Read>(
+    queries: Vec<String>,
+    stdin_func: fn() -> R,
+) -> Result<Vec<String>, SQLError> {
     let mut acc = vec![];
 
-    queries.into_iter().try_fold((), |(), query| {
-        if query.is_empty() {
-            return Ok(());
-        }
+    queries
+        .into_iter()
+        .try_fold((), |(), query| {
+            let query = query.trim();
+            let mut chars = query.chars();
+            let query = match chars.next() {
+                Some('-') => {
+                    // This comparison is correct since we compare with an ASCII character
+                    // Alternatively, matches!(chars.next(), None)
+                    if query.len() == 1 {
+                        let mut query = String::new();
 
-        if query == "-" {
-            return read_query(&mut stdin(), "<stdin>").map(|query| {
-                acc.push(query);
-            });
-        }
+                        let _ = stdin_func()
+                            .read_to_string(&mut query)
+                            .map_err(|error| SQLError::Io(("read <stdin>".to_string(), error)))?;
 
-        match query.strip_prefix('@') {
-            None => {
+                        query
+                    } else {
+                        query.to_owned()
+                    }
+                }
+                Some('@') => {
+                    let filename: &str = chars.as_str(); // first char is already removed
+
+                    std::fs::read_to_string(filename)
+                        .map_err(|error| SQLError::Io((format!("read \"{filename}\""), error)))?
+                }
+                None | Some(_) => query.to_owned(),
+            };
+
+            if !query.is_empty() {
                 acc.push(query);
-                Ok(())
             }
-            Some(filename) => read_from_file(filename).map(|query| {
-                acc.push(query);
-            }),
-        }
-    })?;
 
-    Ok(acc)
-}
-
-#[inline]
-fn read_from_file(filename: &str) -> Result<String, SQLError> {
-    let mut file = OpenOptions::new()
-        .read(true)
-        .write(false)
-        .create(false)
-        .open(filename)
-        .expect("Unable to open");
-
-    read_query(&mut file, filename)
-}
-
-#[inline]
-fn read_query<File>(file: &mut File, filename: &str) -> Result<String, SQLError>
-where
-    File: std::io::Read,
-{
-    let mut query = String::new();
-
-    file.read_to_string(&mut query)
-        .map_err(|error| SQLError::Io((format!("read {filename}"), error)))
-        .map(|_| query)
+            Ok::<(), SQLError>(())
+        })
+        .map(|()| acc)
 }
