@@ -61,7 +61,7 @@ jobs:
     - name: Cache Cargo
       uses: ./.github/actions/cache
     - name: Build
-      uses: taiki-e/upload-rust-binary-action@v1.26.0
+      uses: taiki-e/upload-rust-binary-action@v1.27.0
       with:
         bin: sqlgrep
         target: ${{ matrix.target }}
