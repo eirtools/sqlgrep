@@ -9,7 +9,7 @@ authors = ["Eir Nym <eirnym@gmail.com>"]
 repository = "https://github.com/eirtools/sqlgrep"
 
 [dependencies]
-sqlx = { version = "=0.8.5", features = [
+sqlx = { version = "=0.8.6", features = [
   "runtime-tokio-native-tls",
   "sqlite",
   "chrono",
