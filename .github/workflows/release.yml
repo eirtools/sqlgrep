@@ -17,7 +17,6 @@ env:
   RUST_BACKTRACE: 1
   CARGO_NET_RETRY: 10
   BINSTALL_DISABLE_TELEMETRY: true
-  CARGO_NET_OFFLINE: true
 jobs:
   build-test:
     permissions:
