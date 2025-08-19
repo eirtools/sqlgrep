@@ -25,6 +25,7 @@ pub(crate) fn generate_select(table_name: &str, dialect: &impl Dialect) -> Strin
         flavor: SelectFlavor::Standard,
         distinct: None,
         top: None,
+        exclude: None,
         projection: [SelectItem::Wildcard(WildcardAdditionalOptions {
             wildcard_token: AttachedToken::empty(),
             opt_ilike: None,
