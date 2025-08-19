@@ -31,7 +31,7 @@ jobs:
         rustc --version
         cargo --version
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Build
       run: cargo build
 
@@ -57,7 +57,7 @@ jobs:
         rustc --version
         cargo --version
     - name: Checkout repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Cache Cargo
       uses: ./.github/actions/cache
     - name: Build
@@ -82,7 +82,7 @@ jobs:
     needs: build
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - uses: actions/download-artifact@v4
       with:
         merge-multiple: true
@@ -101,7 +101,7 @@ jobs:
       contents: read
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Package
       run: cargo publish --no-verify
       env:
