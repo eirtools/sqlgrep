@@ -22,4 +22,4 @@ futures = { version = "=0.3.31", features = ["async-await"] }
 clap = { version = "4.5.46", features = ["derive", "wrap_help"] }
 indoc = { version = "2.0.6" }
 stderrlog = { version = "=0.6.0" }
-regex = { version = "1.11.1" }
+regex = { version = "1.11.2" }
