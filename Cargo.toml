@@ -17,7 +17,7 @@ sqlx = { version = "=0.8.6", features = [
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
 sqlparser = { version = "=0.58.0" }
 chrono = { version = "=0.4.42", features = ["alloc"] }
-log = { version = "0.4.27" }
+log = { version = "0.4.29" }
 futures = { version = "=0.3.31", features = ["async-await"] }
 clap = { version = "4.5.47", features = ["derive", "wrap_help"] }
 indoc = { version = "2.0.6" }
