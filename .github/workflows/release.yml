@@ -68,7 +68,7 @@ jobs:
         #   we don't allow neither secrets to be used during build process, nor additional permissions
         dry-run: true
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.target }}
         path: '*-${{ matrix.target }}*'
@@ -82,7 +82,7 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v6
-    - uses: actions/download-artifact@v5
+    - uses: actions/download-artifact@v6
       with:
         merge-multiple: true
         path: artifacts
