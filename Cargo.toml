@@ -15,7 +15,7 @@ sqlx = { version = "=0.8.6", features = [
   "chrono",
 ] }
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
-sqlparser = { version = "=0.60.0" }
+sqlparser = { version = "=0.61.0" }
 chrono = { version = "=0.4.44", features = ["alloc"] }
 log = { version = "0.4.29" }
 futures = { version = "=0.3.32", features = ["async-await"] }
