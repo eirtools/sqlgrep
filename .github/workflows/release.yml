@@ -68,7 +68,7 @@ jobs:
         #   we don't allow neither secrets to be used during build process, nor additional permissions
         dry-run: true
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ${{ matrix.target }}
         path: '*-${{ matrix.target }}*'
