@@ -19,7 +19,7 @@ sqlparser = { version = "=0.60.0" }
 chrono = { version = "=0.4.44", features = ["alloc"] }
 log = { version = "0.4.29" }
 futures = { version = "=0.3.32", features = ["async-await"] }
-clap = { version = "4.6.0", features = ["derive", "wrap_help"] }
+clap = { version = "4.6.1", features = ["derive", "wrap_help"] }
 indoc = { version = "2.0.7" }
 stderrlog = { version = "=0.6.0" }
 regex = { version = "1.12.3" }
